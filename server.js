@@ -8,7 +8,6 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -17,9 +16,10 @@ let participants = {}; // { username: {count, running, remaining, timer} }
 io.on('connection', (socket) => {
   console.log('New connection:', socket.id);
 
-  // При подключении отправляем текущее состояние
+  // Отправляем текущее состояние всем
   socket.emit('updateState', participants);
 
+  // Когда участник заходит
   socket.on('join', (username) => {
     if (!participants[username]) {
       participants[username] = { count: 0, running: false, remaining: 0 };
@@ -27,6 +27,7 @@ io.on('connection', (socket) => {
     io.emit('updateState', participants);
   });
 
+  // Когда участник нажимает "+1 тикет"
   socket.on('increment', (username) => {
     const p = participants[username];
     if (p && p.running && p.remaining > 0) {
@@ -35,7 +36,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 🟢 Новый функционал — каждый сам себе запускает таймер
+  // Каждый сам себе запускает таймер
   socket.on('startSelfTimer', ({ username, seconds }) => {
     const p = participants[username];
     if (!p) return;
@@ -56,49 +57,6 @@ io.on('connection', (socket) => {
       io.emit('updateState', participants);
     }, 1000);
 
-    io.emit('updateState', participants);
-  });
-});
-
-  socket.on('adminStart', ({ password, username, seconds }) => {
-    if (password !== ADMIN_PASSWORD) return;
-    const p = participants[username];
-    if (!p) return;
-
-    if (p.timer) clearInterval(p.timer);
-
-    p.running = true;
-    p.remaining = seconds;
-
-    p.timer = setInterval(() => {
-      p.remaining--;
-      if (p.remaining <= 0) {
-        p.running = false;
-        p.remaining = 0;
-        clearInterval(p.timer);
-      }
-      io.emit('updateState', participants);
-    }, 1000);
-
-    io.emit('updateState', participants);
-  });
-
-  socket.on('adminStop', ({ password, username }) => {
-    if (password !== ADMIN_PASSWORD) return;
-    const p = participants[username];
-    if (!p) return;
-    p.running = false;
-    p.remaining = 0;
-    if (p.timer) clearInterval(p.timer);
-    io.emit('updateState', participants);
-  });
-
-  socket.on('adminReset', (password) => {
-    if (password !== ADMIN_PASSWORD) return;
-    for (let u in participants) {
-      if (participants[u].timer) clearInterval(participants[u].timer);
-      participants[u] = { count: 0, running: false, remaining: 0 };
-    }
     io.emit('updateState', participants);
   });
 });
