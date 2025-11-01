@@ -22,33 +22,33 @@ input { padding:6px 10px; border-radius:5px; border:none; margin-right:5px; }
 <h1>Соревнование по тикетам</h1>
 
 <div>
-<input id="usernameInput" placeholder="Ваше имя">
-<button id="joinBtn">Войти</button>
+  <input id="usernameInput" placeholder="Ваше имя">
+  <button id="joinBtn">Войти</button>
 </div>
 
 <div id="timer">⏳ Ожидание старта...</div>
 
 <div id="board"></div>
 
-<div id="adminPanel">
-<h3>Админ панель</h3>
-<input type="text" id="adminPass" placeholder="Пароль">
-<input type="text" id="targetUser" placeholder="Участник">
-<input type="number" id="duration" placeholder="Время (сек)">
-<button id="startBtn">▶ Начать</button>
-<button id="stopBtn">⏹ Остановить</button>
-<button id="resetBtn">🔄 Сбросить все</button>
+<div id="adminPanel" style="display:none;">
+  <h3>Админ панель</h3>
+  <input type="text" id="adminPass" placeholder="Пароль">
+  <input type="text" id="targetUser" placeholder="Участник">
+  <input type="number" id="duration" placeholder="Время (сек)">
+  <button id="startBtn">▶ Начать</button>
+  <button id="stopBtn">⏹ Остановить</button>
+  <button id="resetBtn">🔄 Сбросить все</button>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
 let username = null;
+
 const usernameInput = document.getElementById('usernameInput');
 const joinBtn = document.getElementById('joinBtn');
 const board = document.getElementById('board');
 const timerEl = document.getElementById('timer');
-
 const adminPanel = document.getElementById('adminPanel');
 const adminPass = document.getElementById('adminPass');
 const targetUser = document.getElementById('targetUser');
@@ -58,64 +58,71 @@ const stopBtn = document.getElementById('stopBtn');
 const resetBtn = document.getElementById('resetBtn');
 
 joinBtn.onclick = () => {
-    username = usernameInput.value.trim();
-    if(!username) return alert("Введите имя!");
-    socket.emit('join', username);
-    usernameInput.disabled = true;
-    joinBtn.disabled = true;
+  username = usernameInput.value.trim();
+  if(!username) return alert("Введите имя!");
+  socket.emit('join', username);
+  usernameInput.disabled = true;
+  joinBtn.disabled = true;
+
+  // Проверка на админа
+  if (username.toLowerCase() === "admin") {
+    const pass = prompt("Введите пароль администратора:");
+    if (pass === "admin123") {
+      adminPanel.style.display = 'block';
+      alert("Добро пожаловать, админ!");
+    } else {
+      alert("Неверный пароль. Панель администратора скрыта.");
+    }
+  }
 };
 
 socket.on('updateState', participants => {
-    board.innerHTML = '';
-    let maxCount = -1;
-    for(let u in participants) {
-        if(participants[u].count > maxCount) maxCount = participants[u].count;
-    }
-    for(let u in participants){
-        const div = document.createElement('div');
-        div.className = 'user';
-        if(participants[u].count === maxCount && maxCount>0) div.classList.add('winner');
-        div.innerHTML = `<div><strong>${u}</strong></div>
-                         <div class="count">${participants[u].count}</div>`;
-        if(u===username){
-            const btn = document.createElement('button');
-            btn.textContent = "+1 тикет";
-            btn.disabled = !participants[u].running;
-            btn.onclick = () => socket.emit('increment', username);
-            div.appendChild(btn);
-        }
-        if(participants[u].running) {
-            const t = document.createElement('div');
-            t.textContent = `⏱ ${participants[u].remaining} сек`;
-            div.appendChild(t);
-        }
-        board.appendChild(div);
+  board.innerHTML = '';
+  let maxCount = Math.max(...Object.values(participants).map(p => p.count), 0);
+  for (let u in participants) {
+    const div = document.createElement('div');
+    div.className = 'user';
+    if (participants[u].count === maxCount && maxCount > 0) div.classList.add('winner');
+    div.innerHTML = `<div><strong>${u}</strong></div>
+                     <div class="count">${participants[u].count}</div>`;
+
+    if (u === username) {
+      const btn = document.createElement('button');
+      btn.textContent = "+1 тикет";
+      btn.disabled = !participants[u].running;
+      btn.onclick = () => socket.emit('increment', username);
+      div.appendChild(btn);
     }
 
-    // Глобальный таймер (показываем если кто-то ещё работает)
-    let active = Object.values(participants).filter(p=>p.running);
-    if(active.length>0) timerEl.textContent = `⏱ Соревнование идёт`;
-    else timerEl.textContent = `🏁 Соревнование завершено!`;
+    if (participants[u].running) {
+      const t = document.createElement('div');
+      t.textContent = `⏱ ${participants[u].remaining} сек`;
+      div.appendChild(t);
+    }
+    board.appendChild(div);
+  }
+
+  let active = Object.values(participants).filter(p => p.running);
+  timerEl.textContent = active.length > 0 ? "⏱ Соревнование идёт" : "🏁 Соревнование завершено!";
 });
 
-// Админ кнопки
 startBtn.onclick = () => {
-    const pass = adminPass.value;
-    const target = targetUser.value;
-    const sec = parseInt(durationInput.value);
-    if(!pass || !target || isNaN(sec) || sec<=0) return alert("Заполните все поля!");
-    socket.emit('adminStart',{password:pass, username:target, seconds:sec});
+  const pass = adminPass.value;
+  const target = targetUser.value;
+  const sec = parseInt(durationInput.value);
+  if(!pass || !target || isNaN(sec) || sec<=0) return alert("Заполните все поля!");
+  socket.emit('adminStart', { password: pass, username: target, seconds: sec });
 };
 stopBtn.onclick = () => {
-    const pass = adminPass.value;
-    const target = targetUser.value;
-    if(!pass || !target) return alert("Заполните пароль и участника!");
-    socket.emit('adminStop',{password:pass, username:target});
+  const pass = adminPass.value;
+  const target = targetUser.value;
+  if(!pass || !target) return alert("Заполните пароль и участника!");
+  socket.emit('adminStop', { password: pass, username: target });
 };
 resetBtn.onclick = () => {
-    const pass = adminPass.value;
-    if(!pass) return alert("Введите пароль!");
-    socket.emit('adminReset',pass);
+  const pass = adminPass.value;
+  if(!pass) return alert("Введите пароль!");
+  socket.emit('adminReset', pass);
 };
 </script>
 </body>

@@ -8,26 +8,24 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = 'admin123';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-let participants = {}; // { username: {count, running, remaining} }
+let participants = {}; // { username: {count, running, remaining, timer} }
 
-io.on('connection', socket => {
-  console.log('New connection', socket.id);
-
-  // Отправляем текущее состояние
+io.on('connection', (socket) => {
+  console.log('New connection:', socket.id);
   socket.emit('updateState', participants);
 
-  socket.on('join', username => {
+  socket.on('join', (username) => {
     if (!participants[username]) {
       participants[username] = { count: 0, running: false, remaining: 0 };
     }
     io.emit('updateState', participants);
   });
 
-  socket.on('increment', username => {
+  socket.on('increment', (username) => {
     const p = participants[username];
     if (p && p.running && p.remaining > 0) {
       p.count++;
@@ -39,6 +37,9 @@ io.on('connection', socket => {
     if (password !== ADMIN_PASSWORD) return;
     const p = participants[username];
     if (!p) return;
+
+    if (p.timer) clearInterval(p.timer);
+
     p.running = true;
     p.remaining = seconds;
 
@@ -65,16 +66,16 @@ io.on('connection', socket => {
     io.emit('updateState', participants);
   });
 
-  socket.on('adminReset', password => {
+  socket.on('adminReset', (password) => {
     if (password !== ADMIN_PASSWORD) return;
     for (let u in participants) {
-      participants[u].count = 0;
-      participants[u].running = false;
-      participants[u].remaining = 0;
       if (participants[u].timer) clearInterval(participants[u].timer);
+      participants[u] = { count: 0, running: false, remaining: 0 };
     }
     io.emit('updateState', participants);
   });
 });
 
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
