@@ -5,17 +5,67 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Соревнование по тикетам</title>
 <style>
-body { font-family: Arial,sans-serif; background:#1e1e2e; color:#eee; padding:20px; display:flex; flex-direction:column; align-items:center; }
-h1 { color:#00ffae; }
-#board { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:15px; width:90%; max-width:800px; margin-top:20px; }
-.user { background:#2b2b3b; border-radius:10px; padding:15px; text-align:center; }
-.count { font-size:2em; color:#00ffae; margin:10px 0; }
-button { padding:8px 14px; border:none; border-radius:6px; background:#4a90e2; color:white; cursor:pointer; margin:5px; font-size:16px; }
-button:disabled { background:#555; cursor:not-allowed; }
-#timer { font-size:1.4em; margin:15px 0; }
-#adminPanel { margin-top:30px; border-top:1px solid #444; padding-top:20px; }
-input { padding:6px 10px; border-radius:5px; border:none; margin-right:5px; }
-.winner { background:#ffd700; color:#000; }
+body {
+  font-family: Arial, sans-serif;
+  background: #1e1e2e;
+  color: #eee;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+h1 {
+  color: #00ffae;
+}
+#board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  width: 90%;
+  max-width: 800px;
+  margin-top: 20px;
+}
+.user {
+  background: #2b2b3b;
+  border-radius: 10px;
+  padding: 15px;
+  text-align: center;
+  transition: 0.3s;
+}
+.count {
+  font-size: 2em;
+  color: #00ffae;
+  margin: 10px 0;
+}
+button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #4a90e2;
+  color: white;
+  cursor: pointer;
+  margin: 5px;
+  font-size: 16px;
+}
+button:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+input {
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: none;
+  margin-right: 5px;
+}
+.winner {
+  background: #ffd700;
+  color: #000;
+}
+.timer {
+  font-size: 1.2em;
+  margin-top: 5px;
+  color: #ffda75;
+}
 </style>
 </head>
 <body>
@@ -26,19 +76,7 @@ input { padding:6px 10px; border-radius:5px; border:none; margin-right:5px; }
   <button id="joinBtn">Войти</button>
 </div>
 
-<div id="timer">⏳ Ожидание старта...</div>
-
 <div id="board"></div>
-
-<div id="adminPanel" style="display:none;">
-  <h3>Админ панель</h3>
-  <input type="text" id="adminPass" placeholder="Пароль">
-  <input type="text" id="targetUser" placeholder="Участник">
-  <input type="number" id="duration" placeholder="Время (сек)">
-  <button id="startBtn">▶ Начать</button>
-  <button id="stopBtn">⏹ Остановить</button>
-  <button id="resetBtn">🔄 Сбросить все</button>
-</div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -48,82 +86,75 @@ let username = null;
 const usernameInput = document.getElementById('usernameInput');
 const joinBtn = document.getElementById('joinBtn');
 const board = document.getElementById('board');
-const timerEl = document.getElementById('timer');
-const adminPanel = document.getElementById('adminPanel');
-const adminPass = document.getElementById('adminPass');
-const targetUser = document.getElementById('targetUser');
-const durationInput = document.getElementById('duration');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const resetBtn = document.getElementById('resetBtn');
 
 joinBtn.onclick = () => {
   username = usernameInput.value.trim();
-  if(!username) return alert("Введите имя!");
+  if (!username) return alert("Введите имя!");
   socket.emit('join', username);
   usernameInput.disabled = true;
   joinBtn.disabled = true;
-
-  // Проверка на админа
-  if (username.toLowerCase() === "admin") {
-    const pass = prompt("Введите пароль администратора:");
-    if (pass === "admin123") {
-      adminPanel.style.display = 'block';
-      alert("Добро пожаловать, админ!");
-    } else {
-      alert("Неверный пароль. Панель администратора скрыта.");
-    }
-  }
 };
 
 socket.on('updateState', participants => {
   board.innerHTML = '';
   let maxCount = Math.max(...Object.values(participants).map(p => p.count), 0);
+
   for (let u in participants) {
+    const p = participants[u];
     const div = document.createElement('div');
     div.className = 'user';
-    if (participants[u].count === maxCount && maxCount > 0) div.classList.add('winner');
-    div.innerHTML = `<div><strong>${u}</strong></div>
-                     <div class="count">${participants[u].count}</div>`;
+    if (p.count === maxCount && maxCount > 0) div.classList.add('winner');
+    div.innerHTML = `
+      <div><strong>${u}</strong></div>
+      <div class="count">${p.count}</div>
+    `;
 
+    // Только свой блок интерактивен
     if (u === username) {
-      const btn = document.createElement('button');
-      btn.textContent = "+1 тикет";
-      btn.disabled = !participants[u].running;
-      btn.onclick = () => socket.emit('increment', username);
-      div.appendChild(btn);
-    }
+      const timeInput = document.createElement('input');
+      timeInput.type = 'number';
+      timeInput.placeholder = 'Минуты';
+      timeInput.min = '1';
+      timeInput.style.width = '80px';
 
-    if (participants[u].running) {
-      const t = document.createElement('div');
-      t.textContent = `⏱ ${participants[u].remaining} сек`;
-      div.appendChild(t);
+      const startBtn = document.createElement('button');
+      startBtn.textContent = '▶ Старт';
+      startBtn.onclick = () => {
+        const mins = parseInt(timeInput.value);
+        if (isNaN(mins) || mins <= 0) return alert('Введите время в минутах!');
+        socket.emit('startSelfTimer', { username, seconds: mins * 60 });
+      };
+
+      const ticketBtn = document.createElement('button');
+      ticketBtn.textContent = '+1 тикет';
+      ticketBtn.disabled = !p.running;
+      ticketBtn.onclick = () => socket.emit('increment', username);
+
+      const timerDisplay = document.createElement('div');
+      timerDisplay.className = 'timer';
+      timerDisplay.textContent = p.running
+        ? `⏱ Осталось: ${formatTime(p.remaining)}`
+        : '⏳ Таймер не запущен';
+
+      div.appendChild(timeInput);
+      div.appendChild(startBtn);
+      div.appendChild(ticketBtn);
+      div.appendChild(timerDisplay);
+    } else if (p.running) {
+      const timerDisplay = document.createElement('div');
+      timerDisplay.className = 'timer';
+      timerDisplay.textContent = `⏱ Осталось: ${formatTime(p.remaining)}`;
+      div.appendChild(timerDisplay);
     }
     board.appendChild(div);
   }
-
-  let active = Object.values(participants).filter(p => p.running);
-  timerEl.textContent = active.length > 0 ? "⏱ Соревнование идёт" : "🏁 Соревнование завершено!";
 });
 
-startBtn.onclick = () => {
-  const pass = adminPass.value;
-  const target = targetUser.value;
-  const sec = parseInt(durationInput.value);
-  if(!pass || !target || isNaN(sec) || sec<=0) return alert("Заполните все поля!");
-  socket.emit('adminStart', { password: pass, username: target, seconds: sec });
-};
-stopBtn.onclick = () => {
-  const pass = adminPass.value;
-  const target = targetUser.value;
-  if(!pass || !target) return alert("Заполните пароль и участника!");
-  socket.emit('adminStop', { password: pass, username: target });
-};
-resetBtn.onclick = () => {
-  const pass = adminPass.value;
-  if(!pass) return alert("Введите пароль!");
-  socket.emit('adminReset', pass);
-};
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 </script>
 </body>
 </html>
