@@ -15,23 +15,26 @@ app.use(express.static(path.join(__dirname, 'public')));
 let participants = {}; // { username: {count, running, remaining, timer} }
 
 io.on('connection', (socket) => {
-  console.log('New connection:', socket.id);
-  socket.emit('updateState', participants);
+  socket.on('startSelfTimer', ({ username, seconds }) => {
+  const p = participants[username];
+  if (!p) return;
+  if (p.timer) clearInterval(p.timer);
 
-  socket.on('join', (username) => {
-    if (!participants[username]) {
-      participants[username] = { count: 0, running: false, remaining: 0 };
+  p.running = true;
+  p.remaining = seconds;
+
+  p.timer = setInterval(() => {
+    p.remaining--;
+    if (p.remaining <= 0) {
+      p.running = false;
+      p.remaining = 0;
+      clearInterval(p.timer);
     }
     io.emit('updateState', participants);
-  });
+  }, 1000);
 
-  socket.on('increment', (username) => {
-    const p = participants[username];
-    if (p && p.running && p.remaining > 0) {
-      p.count++;
-      io.emit('updateState', participants);
-    }
-  });
+  io.emit('updateState', participants);
+});
 
   socket.on('adminStart', ({ password, username, seconds }) => {
     if (password !== ADMIN_PASSWORD) return;
