@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Соревнование по тикетам</title>
+<style>
+body { font-family: Arial,sans-serif; background:#1e1e2e; color:#eee; padding:20px; display:flex; flex-direction:column; align-items:center; }
+h1 { color:#00ffae; }
+#board { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:15px; width:90%; max-width:800px; margin-top:20px; }
+.user { background:#2b2b3b; border-radius:10px; padding:15px; text-align:center; }
+.count { font-size:2em; color:#00ffae; margin:10px 0; }
+button { padding:8px 14px; border:none; border-radius:6px; background:#4a90e2; color:white; cursor:pointer; margin:5px; font-size:16px; }
+button:disabled { background:#555; cursor:not-allowed; }
+#timer { font-size:1.4em; margin:15px 0; }
+#adminPanel { margin-top:30px; border-top:1px solid #444; padding-top:20px; }
+input { padding:6px 10px; border-radius:5px; border:none; margin-right:5px; }
+.winner { background:#ffd700; color:#000; }
+</style>
+</head>
+<body>
+<h1>Соревнование по тикетам</h1>
+
+<div>
+<input id="usernameInput" placeholder="Ваше имя">
+<button id="joinBtn">Войти</button>
+</div>
+
+<div id="timer">⏳ Ожидание старта...</div>
+
+<div id="board"></div>
+
+<div id="adminPanel">
+<h3>Админ панель</h3>
+<input type="text" id="adminPass" placeholder="Пароль">
+<input type="text" id="targetUser" placeholder="Участник">
+<input type="number" id="duration" placeholder="Время (сек)">
+<button id="startBtn">▶ Начать</button>
+<button id="stopBtn">⏹ Остановить</button>
+<button id="resetBtn">🔄 Сбросить все</button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+let username = null;
+const usernameInput = document.getElementById('usernameInput');
+const joinBtn = document.getElementById('joinBtn');
+const board = document.getElementById('board');
+const timerEl = document.getElementById('timer');
+
+const adminPanel = document.getElementById('adminPanel');
+const adminPass = document.getElementById('adminPass');
+const targetUser = document.getElementById('targetUser');
+const durationInput = document.getElementById('duration');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+joinBtn.onclick = () => {
+    username = usernameInput.value.trim();
+    if(!username) return alert("Введите имя!");
+    socket.emit('join', username);
+    usernameInput.disabled = true;
+    joinBtn.disabled = true;
+};
+
+socket.on('updateState', participants => {
+    board.innerHTML = '';
+    let maxCount = -1;
+    for(let u in participants) {
+        if(participants[u].count > maxCount) maxCount = participants[u].count;
+    }
+    for(let u in participants){
+        const div = document.createElement('div');
+        div.className = 'user';
+        if(participants[u].count === maxCount && maxCount>0) div.classList.add('winner');
+        div.innerHTML = `<div><strong>${u}</strong></div>
+                         <div class="count">${participants[u].count}</div>`;
+        if(u===username){
+            const btn = document.createElement('button');
+            btn.textContent = "+1 тикет";
+            btn.disabled = !participants[u].running;
+            btn.onclick = () => socket.emit('increment', username);
+            div.appendChild(btn);
+        }
+        if(participants[u].running) {
+            const t = document.createElement('div');
+            t.textContent = `⏱ ${participants[u].remaining} сек`;
+            div.appendChild(t);
+        }
+        board.appendChild(div);
+    }
+
+    // Глобальный таймер (показываем если кто-то ещё работает)
+    let active = Object.values(participants).filter(p=>p.running);
+    if(active.length>0) timerEl.textContent = `⏱ Соревнование идёт`;
+    else timerEl.textContent = `🏁 Соревнование завершено!`;
+});
+
+// Админ кнопки
+startBtn.onclick = () => {
+    const pass = adminPass.value;
+    const target = targetUser.value;
+    const sec = parseInt(durationInput.value);
+    if(!pass || !target || isNaN(sec) || sec<=0) return alert("Заполните все поля!");
+    socket.emit('adminStart',{password:pass, username:target, seconds:sec});
+};
+stopBtn.onclick = () => {
+    const pass = adminPass.value;
+    const target = targetUser.value;
+    if(!pass || !target) return alert("Заполните пароль и участника!");
+    socket.emit('adminStop',{password:pass, username:target});
+};
+resetBtn.onclick = () => {
+    const pass = adminPass.value;
+    if(!pass) return alert("Введите пароль!");
+    socket.emit('adminReset',pass);
+};
+</script>
+</body>
+</html>
